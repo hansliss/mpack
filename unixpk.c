@@ -24,27 +24,27 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <getopt.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <unistd.h>
 #include "common.h"
-#include "encode.h"
 #include "version.h"
 #include "xmalloc.h"
 
 #define MAXADDRESS 100
 
-extern char *getenv();
-
-extern int errno;
-extern int optind;
-extern char *optarg;
+extern int attachment;
 
 void usage(void);
 void sendmail(FILE *infile, char **addr, int start);
 void inews(FILE *infile);
+void os_perror(char *str);
+int encode(FILE *infile, FILE *applefile, char *fname, FILE *descfile,
+	   char *subject, char *headers, long int maxsize,
+	   char *typeoverride, char *outfname);
 
 char hexdigit(unsigned int v) {
   if (v > 15) {
@@ -108,7 +108,7 @@ int main(int argc, char **argv)
 	maxsize = atoi(p);
     }
 
-    while ((opt = getopt(argc, argv, "s:d:m:c:o:n:")) != EOF) {
+    while ((opt = getopt(argc, argv, "as:d:m:c:o:n:")) != EOF) {
 	switch (opt) {
 	case 's':
 	    subject = optarg;
@@ -132,6 +132,10 @@ int main(int argc, char **argv)
 
 	case 'n':
 	    newsgroups = optarg;
+	    break;
+
+	case 'a':
+	    attachment = 1;
 	    break;
 
 	default:
@@ -199,7 +203,7 @@ int main(int argc, char **argv)
 	    fprintf(stderr, "A subject is required\n");
 	    usage();
 	}
-	if (p = strchr(sbuf, '\n')) *p = '\0';
+	if ((p = strchr(sbuf, '\n'))) *p = '\0';
 	subject = sbuf;
     }	
 
@@ -208,7 +212,7 @@ int main(int argc, char **argv)
 	    strcpy(fnamebuf, getenv("TMPDIR"));
 	}
 	else {
-	    strcpy(fnamebuf, "/var/tmp");
+	    strcpy(fnamebuf, "/tmp");
 	}
 	strcat(fnamebuf, "/mpackXXXXXX");
 	mktemp(fnamebuf);
@@ -217,14 +221,14 @@ int main(int argc, char **argv)
 
     infile = fopen(fname, "r");
     if (!infile) {
-	perror(fname);
+	os_perror(fname);
 	exit(1);
     }
 
     if (descfname) {
 	descfile = fopen(descfname, "r");
 	if (!descfile) {
-	    perror(descfname);
+	    os_perror(descfname);
 	    exit(1);
 	}
     }
