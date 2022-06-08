@@ -90,7 +90,7 @@ char *os_idtodir(char *id)
 	strcpy(buf, getenv("TMPDIR"));
     }
     else {
-	strcpy(buf, "/usr/tmp");
+	strcpy(buf, "/var/tmp");
     }
     strcat(buf, "/m-prts-");
     p = getenv("USER");

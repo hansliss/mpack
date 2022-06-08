@@ -23,9 +23,14 @@
  * SOFTWARE.
  */
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include "common.h"
+#include "encode.h"
 #include "version.h"
 #include "xmalloc.h"
 
@@ -41,11 +46,50 @@ void usage(void);
 void sendmail(FILE *infile, char **addr, int start);
 void inews(FILE *infile);
 
+char hexdigit(unsigned int v) {
+  if (v > 15) {
+    return '?';
+  } else if (v > 9) {
+    return v - 10 + 'A';
+  } else {
+    return v + '0';
+  }
+}
+
+char *doqp(char *txt) {
+  char *newstr=NULL;
+  int eightbits=0;
+  for (int i=0; i<strlen(txt); i++) {
+    if (txt[i] & 0x80) {
+      eightbits++;
+    }
+  }
+  if (!eightbits) {
+    return txt;
+  }
+  newstr = (char *)malloc(strlen(txt) + 12 + eightbits * 3 + 1 );
+  strcat(newstr, "=?UTF-8?Q?");
+  int p=10;
+  for (int i=0; i<strlen(txt); i++) {
+    if (txt[i] & 0x80) {
+      newstr[p++] = '=';
+      newstr[p++] = hexdigit((txt[i] & 0xF0) >> 4);
+      newstr[p++] = hexdigit((txt[i] & 0x0F));
+    } else {
+      newstr[p++] = txt[i];
+    }
+  }
+  strcat(newstr, "?=");
+  // fprintf(stderr, "'%s' becomes '%s'\n", txt, newstr);
+  return newstr;
+}
+
 int main(int argc, char **argv)
 {
     int opt;
     char *fname = 0;
     char *subject = 0;
+    char *qpsubject = 0;
     char *descfname = 0;
     long maxsize = 0;
     char *outfname = 0;
@@ -164,7 +208,7 @@ int main(int argc, char **argv)
 	    strcpy(fnamebuf, getenv("TMPDIR"));
 	}
 	else {
-	    strcpy(fnamebuf, "/usr/tmp");
+	    strcpy(fnamebuf, "/var/tmp");
 	}
 	strcat(fnamebuf, "/mpackXXXXXX");
 	mktemp(fnamebuf);
@@ -173,19 +217,21 @@ int main(int argc, char **argv)
 
     infile = fopen(fname, "r");
     if (!infile) {
-	os_perror(fname);
+	perror(fname);
 	exit(1);
     }
 
     if (descfname) {
 	descfile = fopen(descfname, "r");
 	if (!descfile) {
-	    os_perror(descfname);
+	    perror(descfname);
 	    exit(1);
 	}
     }
 
-    if (encode(infile, (FILE *)0, fname, descfile, subject, headers,
+    qpsubject = doqp(subject);
+
+    if (encode(infile, (FILE *)0, fname, descfile, qpsubject, headers,
 	       maxsize, ctype, outfname)) exit(1);
 
     if (optind < argc || newsgroups) {
